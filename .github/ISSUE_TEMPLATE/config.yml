@@ -1,0 +1,10 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ajaysharmadeveloper/transcriptor-mcp-public/security/advisories/new
+    about: Report privately, not as a public issue. See SECURITY.md.
+  - name: A URL that will not download
+    url: https://github.com/yt-dlp/yt-dlp/issues
+    about: >-
+      Extraction is entirely yt-dlp's job — Transcriptor contains no
+      per-site code. If yt-dlp cannot fetch it, neither can this.

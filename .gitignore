@@ -1,0 +1,37 @@
+# Things any clone of this project will produce. Anything specific to one
+# machine or one person belongs in .git/info/exclude instead, which is local and
+# never committed.
+
+# Secrets. The DSN lives in .env at mode 0600 and must never be committed.
+.env
+env
+
+# Runtime data: model weights and in-flight scratch audio. Regenerable with
+# `transcriptor-mcp setup`, and several gigabytes.
+.transcriptor/
+
+# Python build and packaging
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.import_linter_cache/
+
+# Benchmark output, written by `make bench`
+bench.json
+
+# Editor and agent directories. These are in the tracked ignore file rather
+# than in .git/info/exclude because they are not specific to one person: any
+# contributor using these tools produces them, and a public repository should
+# not depend on each of them remembering to exclude it locally.
+.idea/
+.vscode/
+.claude/
+.remember/

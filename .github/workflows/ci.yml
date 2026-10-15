@@ -1,0 +1,83 @@
+name: CI
+
+# The suite needs no inference engine, no model weights, no GPU — and since the
+# database became a file in the project, no service either. That has been true
+# of the engine since FakeEngine existed; it became true of the database when
+# Postgres was replaced by SQLite, which is why the separate Postgres job that
+# used to live here is gone. Every push runs the whole thing, including the 187
+# database tests, on all three operating systems.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Real ffmpeg, on every runner. The cancellation test starts one and
+      # kills it, which is precisely the behaviour that differs per platform —
+      # on Windows `kill()` spares the children — so stubbing it here would
+      # test the stub. It is also the cheapest way to exercise the extract
+      # path on three operating systems.
+      #
+      # Each platform's own package manager rather than a third-party action:
+      # this repository is public and its premise is that nothing untrusted
+      # runs on your machine. That argument does not stop at CI.
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress -y
+
+      - name: Install dependencies
+        # No engine extra, and no database service. The point is that the
+        # application layer needs neither; a run that quietly installed one
+        # would stop proving the thing this matrix exists to prove.
+        run: uv sync --all-groups
+
+      # The import contracts run first. A dependency-rule violation is
+      # architectural, so it should fail the build before a behavioural test
+      # gets the chance to pass.
+      - name: Import contracts
+        run: uv run lint-imports
+
+      - name: Tests
+        run: uv run pytest -q
+
+  build:
+    name: wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      # The .sql files are not incidental data: the server refuses to start
+      # without them, so a wheel that ships without them is broken in a way
+      # nothing else here would catch.
+      - name: Migrations are inside the wheel
+        run: |
+          python -m zipfile -l dist/*.whl | grep -q 'migrations/001' \
+            || { echo "::error::the wheel is missing its migrations"; exit 1; }

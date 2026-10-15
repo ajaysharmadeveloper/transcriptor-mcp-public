@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine churn. The engines are deliberately left out of
+      # the group: an MLX or CTranslate2 bump can move the memory API or the
+      # decode defaults, and those need reading rather than merging.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+        exclude-patterns: ["mlx-whisper", "faster-whisper", "silero-vad"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

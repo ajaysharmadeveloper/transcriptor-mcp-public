@@ -1,0 +1,58 @@
+name: Bug report
+description: Something behaves differently from how it is documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please run `transcriptor-mcp doctor` first and paste its output below.
+        It reports the OS, architecture, selected engine, device, memory
+        pressure and migration state — which is most of what any answer would
+        otherwise start by asking for.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: doctor output
+      description: The full output of `transcriptor-mcp doctor` (it masks the database password).
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: >-
+        A local file or a URL? For a URL, which site — the answer often lies in
+        yt-dlp rather than here. Do not paste anything private.
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - mlx (Apple Silicon)
+        - faster-whisper on CUDA
+        - faster-whisper on CPU
+        - fake engine (TRANSCRIPTOR_FAKE_ENGINE=1)
+        - not sure — see the doctor output above
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: >-
+        Errors carry a code and a `resumable` flag. Both are useful; the stack
+        trace usually more so.
+      render: shell

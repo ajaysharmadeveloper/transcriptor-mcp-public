@@ -1,0 +1,6 @@
+# Sample media dropped in here to enable the VAD tests. Not committed: it is
+# someone's recording, and the tests skip cleanly without it.
+*.wav
+*.mp4
+*.m4a
+*.mp3

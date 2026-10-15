@@ -1,0 +1,248 @@
+[project]
+name = "transcriptor-mcp"
+version = "0.1.0"
+description = "Local, private transcription MCP server — Whisper large-v3 on your own machine"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "Ajay Sharma" }]
+keywords = [
+    "mcp", "whisper", "transcription", "speech-to-text", "apple-silicon",
+    "mlx", "faster-whisper", "ctranslate2", "cuda", "subtitles", "srt",
+    "offline", "privacy",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Environment :: MacOS X",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "fastmcp>=2.0,<3.0",
+    "aiosqlite>=0.20",
+    "sqlalchemy[asyncio]>=2.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "psutil>=6.0",
+]
+
+[project.optional-dependencies]
+# Apple Silicon only, and the environment marker is what makes that safe: on
+# Linux or Windows `pip install "transcriptor-mcp[mlx]"` then resolves to
+# nothing rather than failing, so a copied install command does not break.
+#
+# Deliberately NOT a hard dependency on any platform: the whole application
+# layer tests against FakeEngine with no MLX and no model weights.
+mlx = [
+    "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+# Everywhere else — Linux, Windows, Intel Macs. CTranslate2 ships CPU and CUDA
+# support in one wheel and chooses at run time, so these two extras differ only
+# in what they add: nvidia-ml-py lets the resource governor read VRAM, which is
+# the difference between governing a GPU and hoping about it.
+cpu = [
+    "faster-whisper>=1.0",
+    # Declared rather than inherited from ctranslate2: the engine adapter
+    # imports numpy itself, to slice the wav window it feeds the model.
+    "numpy>=1.26",
+]
+cuda = [
+    "faster-whisper>=1.0",
+    "numpy>=1.26",
+    "nvidia-ml-py>=12.0",
+]
+# Phase 2.
+media = [
+    "yt-dlp>=2024.12.13",
+]
+# Silero VAD. Declares its own torch and torchaudio, so it is self-sufficient
+# on every platform — on macOS that torch is the one mlx-whisper already wanted,
+# and elsewhere it is the only copy. ~2MB of weights on top.
+vad = [
+    "silero-vad>=5.1",
+]
+# Punctuation restoration. ~1.1GB of weights, loaded only after the ASR model is
+# evicted — the two do not fit under the self cap together.
+punctuate = [
+    "transformers>=4.40",
+]
+# One-off: `transcriptor-mcp import-postgres`, for anyone who used Transcriptor
+# before it stopped needing a database server. An extra rather than a
+# dependency, because a tool for a migration performed once should not be in
+# everybody's install.
+pgimport = [
+    "asyncpg>=0.30",
+]
+
+[project.scripts]
+transcriptor-mcp = "transcriptor.server:main"
+
+[project.urls]
+Homepage = "https://github.com/ajaysharmadeveloper/transcriptor-mcp-public"
+Repository = "https://github.com/ajaysharmadeveloper/transcriptor-mcp-public"
+Issues = "https://github.com/ajaysharmadeveloper/transcriptor-mcp-public/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.24",
+    "import-linter>=2.0",
+    # The engine tests stub the inference library but still exercise the real
+    # audio-window reader, which is numpy. Without this the suite passes only
+    # on a machine where some other package happened to install it — which is
+    # exactly how it reached CI broken.
+    "numpy>=1.26",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/transcriptor"]
+# The .sql files are not incidental data — the server refuses to start without
+# them, so they must ship inside the wheel.
+artifacts = ["src/transcriptor/migrations/*.sql"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/", "tests/", "README.md", "LICENSE", "Makefile"]
+
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "slow: needs MLX, model weights, or real media fixtures",
+    "db: needs a database (SQLite, so this is now always available)",
+]
+
+# ---------------------------------------------------------------------------
+# The dependency rule (architecture §2, invariant I9), enforced by a failing
+# build rather than by discipline. Discipline erodes; a failing build does not.
+[tool.importlinter]
+root_packages = ["transcriptor"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "domain imports nothing from the project"
+type = "forbidden"
+source_modules = ["transcriptor.domain"]
+forbidden_modules = [
+    "transcriptor.ports",
+    "transcriptor.services",
+    "transcriptor.adapters",
+    "transcriptor.tools",
+    "transcriptor.server",
+    "transcriptor.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "ports depend only on domain"
+type = "forbidden"
+source_modules = ["transcriptor.ports"]
+forbidden_modules = [
+    "transcriptor.services",
+    "transcriptor.adapters",
+    "transcriptor.tools",
+    "transcriptor.server",
+    "transcriptor.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "services never import adapters"
+type = "forbidden"
+source_modules = ["transcriptor.services"]
+forbidden_modules = [
+    "transcriptor.adapters",
+    "transcriptor.tools",
+    "transcriptor.server",
+]
+
+[[tool.importlinter.contracts]]
+name = "adapters never import services"
+type = "forbidden"
+source_modules = ["transcriptor.adapters"]
+forbidden_modules = [
+    "transcriptor.services",
+    "transcriptor.tools",
+    "transcriptor.server",
+]
+
+[[tool.importlinter.contracts]]
+name = "tool handlers touch the database only"
+type = "forbidden"
+source_modules = ["transcriptor.tools"]
+forbidden_modules = [
+    "transcriptor.adapters",
+    "transcriptor.server",
+    "subprocess",
+    "shutil",
+    "mlx",
+    "mlx_whisper",
+    "faster_whisper",
+    "ctranslate2",
+    "psutil",
+]
+
+[[tool.importlinter.contracts]]
+name = "only the composition root imports adapters"
+type = "forbidden"
+source_modules = [
+    "transcriptor.domain",
+    "transcriptor.ports",
+    "transcriptor.services",
+    "transcriptor.tools",
+    "transcriptor.config",
+]
+forbidden_modules = ["transcriptor.adapters"]
+
+[[tool.importlinter.contracts]]
+name = "layering"
+type = "layers"
+layers = [
+    "transcriptor.server",
+    "transcriptor.tools",
+    "transcriptor.services",
+    "transcriptor.ports",
+    "transcriptor.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "the ORM stays behind the store adapters"
+type = "forbidden"
+source_modules = [
+    "transcriptor.domain",
+    "transcriptor.ports",
+    "transcriptor.services",
+    "transcriptor.tools",
+]
+forbidden_modules = ["sqlalchemy", "aiosqlite", "sqlite3"]
+
+# Renamed from "MLX stays behind the engine adapter" when a second engine
+# arrived. The rule was never about MLX: it is that no layer above `adapters`
+# may know which inference library is running, which is what keeps adding a
+# third engine a one-file job.
+[[tool.importlinter.contracts]]
+name = "inference libraries stay behind the engine adapters"
+type = "forbidden"
+source_modules = [
+    "transcriptor.domain",
+    "transcriptor.ports",
+    "transcriptor.services",
+    "transcriptor.tools",
+]
+forbidden_modules = [
+    "mlx",
+    "mlx_whisper",
+    "faster_whisper",
+    "ctranslate2",
+]
